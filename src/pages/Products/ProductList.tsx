@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, Pencil, Trash2, Search, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils'; // shadcn utility for classNames
@@ -104,6 +106,8 @@ export default function ProductList() {
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
 
+  const [inStockOnly, setInStockOnly] = useState<boolean>(false);
+
   const navigate = useNavigate();
 
 
@@ -119,6 +123,8 @@ export default function ProductList() {
     if (selectedCategory !== 'all') params.category = selectedCategory;
     if (minPrice && !isNaN(Number(minPrice))) params.minPrice = Number(minPrice);
     if (maxPrice && !isNaN(Number(maxPrice))) params.maxPrice = Number(maxPrice);
+
+    if (inStockOnly) {params.inStock = 'true';}
 
     const res = await api.get('/products', { params });
 
@@ -137,7 +143,7 @@ export default function ProductList() {
     debounce((page: number) => {
       fetchProducts(page);
     }, 500),
-    [searchTerm, selectedCategory, minPrice, maxPrice]
+    [searchTerm, selectedCategory, minPrice, maxPrice,inStockOnly]
   );
 
   useEffect(() => {
@@ -278,7 +284,6 @@ export default function ProductList() {
                 </SelectContent>
               </Select>
             </div>
-
           </div>
 
           {/* ROW 2 — Price range */}
@@ -354,7 +359,27 @@ export default function ProductList() {
                       <TableHead>Nom</TableHead>
                       <TableHead>Prix</TableHead>
                       <TableHead>Remise</TableHead>
-                      <TableHead>Stock total</TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span>Stock total</span>
+                          {/* <input
+                            type="checkbox"
+                            id="inStockOnly"
+                            checked={inStockOnly}
+                            onChange={(e) => setInStockOnly(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+                          /> */}
+                          <Switch
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+                            id="inStockOnly"
+                            checked={inStockOnly}
+                            onCheckedChange={(checked) => {
+                              setInStockOnly(checked);
+                            }}
+                          />
+                        </div>
+                      </TableHead>
+
                       <TableHead>Variantes</TableHead>
                       <TableHead>Catégorie</TableHead>
                       <TableHead>Mis en avant</TableHead>
