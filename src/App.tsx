@@ -11,6 +11,7 @@ import ProductCreate from './pages/Products/ProductCreate';
 import OrderList from './pages/Orders/OrderList';
 import Wilayas from './pages/Wilayas';
 import Categories from './pages/Categories';
+import ProductEdit from './pages/Products/ProductEdit';
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ function App() {
 
             <Route path="/products" element={<ProductList />} />
             <Route path="/products/new" element={<ProductCreate />} />
+            <Route path="/products/edit/:id" element={<ProductEdit />} />
             <Route path="/orders" element={<OrderList />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/wilayas" element={<Wilayas />} />

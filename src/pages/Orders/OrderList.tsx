@@ -17,6 +17,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Search, Eye, CheckCircle2, Truck, PackageCheck, XCircle, Clock } from 'lucide-react';
 import api from '@/lib/api';
@@ -61,6 +69,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
 
 export default function OrderList() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,12 +87,11 @@ export default function OrderList() {
         params.status = statusFilter;
       }
 
-      // Optional: if backend supports search
-      // if (searchTerm.trim()) params.search = searchTerm.trim();
+      if (searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
 
       const res = await api.get('/orders', { params });
-
-      // Your backend returns { orders: [...], currentPage, totalPages, totalOrders, ... }
       setOrders(res.data.orders || res.data || []);
     } catch (err: any) {
       console.error('Orders fetch error:', err);
@@ -95,40 +103,42 @@ export default function OrderList() {
 
   useEffect(() => {
     fetchOrders();
-  }, [statusFilter]);
+  }, [statusFilter, searchTerm]);
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     try {
       setUpdatingId(orderId);
 
-      // Optional: extra safety (though Select already limits values)
-      const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] as const;
-      if (!validStatuses.includes(newStatus as any)) {
-        throw new Error('Statut invalide');
-      }
-
       await api.put(`/orders/${orderId}/status`, { status: newStatus });
 
       toast.success('Statut mis à jour');
-
       setOrders((prev: Order[]) =>
         prev.map((o) =>
           o._id === orderId ? { ...o, status: newStatus as Order['status'] } : o
         )
       );
+
+      // Update selected order if open
+      if (selectedOrder?._id === orderId) {
+        setSelectedOrder((prev) => prev ? { ...prev, status: newStatus as Order['status'] } : null);
+      }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Erreur lors de la mise à jour');
+      toast.error(err.response?.data?.message || 'Erreur mise à jour statut');
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const filteredOrders = orders.filter((order) =>
-    searchTerm.trim() === '' ||
-    order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.customerPhone.includes(searchTerm) ||
-    order.customerEmail.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getStatusBadge = (status: string) => {
+    const config = statusConfig[status] || { color: 'bg-gray-100', icon: Clock };
+    const Icon = config.icon;
+    return (
+      <Badge variant="outline" className={config.color}>
+        <Icon className="mr-1 h-3 w-3" />
+        {config.label}
+      </Badge>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -143,7 +153,6 @@ export default function OrderList() {
           <CardTitle className="text-lg">Filtres</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4 flex-wrap">
-          {/* Status */}
           <div className="w-full sm:w-48">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger>
@@ -160,7 +169,6 @@ export default function OrderList() {
             </Select>
           </div>
 
-          {/* Search */}
           <div className="relative flex-1 min-w-62.5">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -180,7 +188,7 @@ export default function OrderList() {
             <div className="flex justify-center items-center py-20">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
-          ) : filteredOrders.length === 0 ? (
+          ) : orders.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               {searchTerm || statusFilter !== 'all'
                 ? 'Aucune commande ne correspond aux filtres'
@@ -197,14 +205,19 @@ export default function OrderList() {
                     <TableHead>Wilaya / Type</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right">Détails</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOrders.map((order) => {
+                  {orders.map((order) => {
+                    const StatusIcon = statusConfig[order.status]?.icon || Clock;
 
                     return (
-                      <TableRow key={order._id} className="hover:bg-muted/50">
+                      <TableRow
+                        key={order._id}
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => setSelectedOrder(order)}
+                      >
                         <TableCell>
                           <div className="font-medium">{order.customerName}</div>
                           <div className="text-xs text-muted-foreground">
@@ -233,47 +246,42 @@ export default function OrderList() {
                         <TableCell>
                           <div>{order.wilaya}</div>
                           <div className="text-xs text-muted-foreground">
-                            {order.deliveryType === 'domicile' ? 'À domicile' : 'En agence'}
+                            {order.deliveryType === 'domicile' ? 'Domicile' : 'Agence'}
                           </div>
                         </TableCell>
 
                         <TableCell>
-                          <Select
-                            value={order.status}
-                            onValueChange={(newStatus) =>
-                              handleStatusChange(order._id, newStatus)
-                            }
-                            disabled={updatingId === order._id}
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">
-                                <Clock className="inline mr-2 h-4 w-4" /> En attente
-                              </SelectItem>
-                              <SelectItem value="confirmed">
-                                <CheckCircle2 className="inline mr-2 h-4 w-4" /> Confirmée
-                              </SelectItem>
-                              <SelectItem value="shipped">
-                                <Truck className="inline mr-2 h-4 w-4" /> Expédiée
-                              </SelectItem>
-                              <SelectItem value="delivered">
-                                <PackageCheck className="inline mr-2 h-4 w-4" /> Livrée
-                              </SelectItem>
-                              <SelectItem value="cancelled">
-                                <XCircle className="inline mr-2 h-4 w-4" /> Annulée
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                          {(() => {
+                            const status = statusConfig[order.status];
+                            if (!status) return null;
+
+                            const Icon = status.icon;
+
+                            return (
+                              <span
+                                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm font-medium ${status.color}`}
+                              >
+                                <Icon className="h-4 w-4" />
+                                {status.label}
+                              </span>
+                            );
+                          })()}
                         </TableCell>
+
 
                         <TableCell>
                           {format(new Date(order.createdAt), 'dd MMM yyyy HH:mm', { locale: fr })}
                         </TableCell>
 
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" title="Voir détails">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation(); // prevent row click
+                              setSelectedOrder(order);
+                            }}
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
                         </TableCell>
@@ -286,6 +294,113 @@ export default function OrderList() {
           )}
         </CardContent>
       </Card>
+
+      {/* Order Details Modal */}
+      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Commande #{selectedOrder?._id?.slice(-6)}</DialogTitle>
+            <DialogDescription>
+              {selectedOrder && format(new Date(selectedOrder.createdAt), 'dd MMMM yyyy à HH:mm', { locale: fr })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedOrder && (
+            <div className="grid gap-6 py-4">
+              {/* Customer Info */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Client</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-2 text-sm">
+                  <div><strong>Nom :</strong> {selectedOrder.customerName}</div>
+                  <div><strong>Téléphone :</strong> {selectedOrder.customerPhone}</div>
+                  <div><strong>Email :</strong> {selectedOrder.customerEmail}</div>
+                </CardContent>
+              </Card>
+
+              {/* Order Details */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Détails de la commande</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <strong>Produit :</strong><br />
+                      {selectedOrder.product?.name || 'Produit supprimé'}
+                      {selectedOrder.variantName && ` (${selectedOrder.variantName})`}
+                    </div>
+                    <div>
+                      <strong>Quantité :</strong> {selectedOrder.quantity}<br />
+                      <strong>Prix unitaire :</strong> {selectedOrder.productPrice.toLocaleString()} DA
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                    <div>
+                      <strong>Livraison :</strong><br />
+                      {selectedOrder.wilaya} – {selectedOrder.deliveryType === 'domicile' ? 'À domicile' : 'En agence'}
+                    </div>
+                    <div>
+                      <strong>Frais livraison :</strong> {selectedOrder.shippingFee.toLocaleString()} DA<br />
+                      {selectedOrder.shippingFee === 0 && <span className="text-green-600 text-xs">(Gratuite)</span>}
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <strong>Total à payer :</strong>{' '}
+                    <span className="text-xl font-bold">{selectedOrder.totalPrice.toLocaleString()} DA</span>
+                  </div>
+
+                  {selectedOrder.note && (
+                    <div className="border-t pt-4">
+                      <strong>Note du client :</strong><br />
+                      <p className="text-sm mt-1 whitespace-pre-wrap">{selectedOrder.note}</p>
+                    </div>
+                  )}
+
+                  <div className="border-t pt-4">
+                    <strong>Adresse complète :</strong><br />
+                    <p className="text-sm mt-1">{selectedOrder.address}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Status */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <strong>Statut actuel :</strong>{' '}
+                  {getStatusBadge(selectedOrder.status)}
+                </div>
+
+                <Select
+                  value={selectedOrder.status}
+                  onValueChange={(newStatus) => handleStatusChange(selectedOrder._id, newStatus)}
+                  disabled={updatingId === selectedOrder._id}
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">En attente</SelectItem>
+                    <SelectItem value="confirmed">Confirmée</SelectItem>
+                    <SelectItem value="shipped">Expédiée</SelectItem>
+                    <SelectItem value="delivered">Livrée</SelectItem>
+                    <SelectItem value="cancelled">Annulée</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setSelectedOrder(null)}>
+              Fermer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
